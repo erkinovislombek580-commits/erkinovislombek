@@ -1,4 +1,5 @@
-import { GoogleGenAI, Chat, GenerateContentResponse, Modality } from "@google/genai";
+
+import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
 import { MediaData, Message } from "../types";
 
 const SYSTEM_INSTRUCTION = `
@@ -49,7 +50,6 @@ SECURITY PROTOCOL (STRICT):
 - YOU MUST REPLY WITH EXACTLY: "[VIOLATION]"
 `;
 
-// Dynamic prompts based on selected language
 const PROMPT_SUFFIXES: Record<string, { voice: string, text: string }> = {
     uz: { voice: "(Javobni o'zbek tilida, qisqa va lo'nda ber.)", text: "(Javobni o'zbek tilida, so'ralgan formatga qat'iy rioya qilgan holda ber.)" },
     ru: { voice: "(Отвечай на русском, кратко и четко.)", text: "(Отвечай на русском, строго следуя запрошенному формату.)" },
@@ -61,60 +61,26 @@ const PROMPT_SUFFIXES: Record<string, { voice: string, text: string }> = {
     es: { voice: "(Responda en español, conciso.)", text: "(Responda en español, siguiendo estrictamente el formato solicitado.)" },
     fr: { voice: "(Répondez en français, concis.)", text: "(Répondez en français, en respectant strictement le format demandé.)" },
     de: { voice: "(Antworten Sie auf Deutsch, kurz.)", text: "(Antworten Sie auf Deutsch, strikt nach dem gewünschten Format.)" },
-    ja: { voice: "(日本語で簡潔に答えてください。)", text: "(日本語で、要求された形式に厳密に従って答えてください。)" },
+    ja: { voice: "(日本語で简洁に答えてください。)", text: "(日本語で、要求された形式に厳密に従って答えてください。)" },
     hi: { voice: "(हिंदी में संक्षिप्त उत्तर दें।)", text: "(हिंदी में अनुरोधित प्रारूप का सख्ती से पालन करते हुए उत्तर दें।)" },
 };
 
-class GeminiService {
-    private ai: GoogleGenAI | null = null;
+export class GeminiService {
+    private ai: GoogleGenAI;
     private chatSession: Chat | null = null;
-    public static readonly jarvizServerName = "jarvizServer"; 
-    private apiKey: string | null = null;
 
     constructor() {
-        // Initially null. Will be set via updateApiKey
-        let envKey = "";
-        try {
-            // Safely check for process.env (prevents crash in browser)
-            // @ts-ignore
-            if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-                // @ts-ignore
-                envKey = process.env.API_KEY;
-            }
-        } catch (e) {
-            // Ignore env errors in browser
-        }
-
-        if (envKey) {
-            this.updateApiKey(envKey);
-        }
-    }
-
-    public updateApiKey(key: string) {
-        this.apiKey = key;
-        try {
-            this.ai = new GoogleGenAI({ apiKey: key });
-            this.chatSession = null; // Reset session on key change
-        } catch (e) {
-            console.error("Failed to init GoogleGenAI with new key", e);
-            this.ai = null;
-        }
-    }
-
-    public hasKey(): boolean {
-        return !!this.ai;
+        // AI initialization is now handled strictly with the environment variable.
+        this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     }
 
     public startChat(history?: Message[]) {
-        if (!this.ai) return;
-
         try {
-            // Convert app Message format to Gemini SDK History format
             let formattedHistory: any[] = [];
             if (history && history.length > 0) {
                 formattedHistory = history
-                    .filter(msg => !msg.isError) // Filter out error messages to prevent API crashes
-                    .filter(msg => msg.text.trim() !== "" || (msg.media && msg.media.length > 0)) // Remove empty messages
+                    .filter(msg => !msg.isError)
+                    .filter(msg => msg.text.trim() !== "" || (msg.media && msg.media.length > 0))
                     .map(msg => ({
                         role: msg.role,
                         parts: [
@@ -130,12 +96,12 @@ class GeminiService {
             }
 
             this.chatSession = this.ai.chats.create({
-                model: 'gemini-2.5-flash',
-                config: {
-                    systemInstruction: SYSTEM_INSTRUCTION,
-                    temperature: 0.7, 
-                },
-                history: formattedHistory
+              model: 'gemini-3-flash-preview',
+              config: {
+                systemInstruction: SYSTEM_INSTRUCTION,
+                temperature: 0.7,
+              },
+              history: formattedHistory
             });
         } catch (error) {
             console.error("JARVIZ Session start error:", error);
@@ -150,35 +116,15 @@ class GeminiService {
         languageCode: string,
         onChunk: (text: string) => void
     ): Promise<string> {
-        if (!this.ai) {
-             const err = "API Key missing. Please set your key.";
-             onChunk(err);
-             return err;
-        }
-
         if (!this.chatSession) {
             this.startChat();
         }
 
-        // Retry logic
-        if (!this.chatSession) {
-             this.startChat();
-             if (!this.chatSession) {
-                 const fallback = "System initialization failed.";
-                 onChunk(fallback);
-                 return fallback;
-             }
-        }
-
-        // Get language specific instruction
         const suffixes = PROMPT_SUFFIXES[languageCode] || PROMPT_SUFFIXES['uz'];
         const suffix = isVoiceInteraction ? suffixes.voice : suffixes.text;
-        
         const finalMessage = `${message} ${suffix}`;
 
         try {
-            let resultStream;
-
             const messageParts: any[] = [{ text: finalMessage }];
 
             if (mediaQueue && mediaQueue.length > 0) {
@@ -193,7 +139,7 @@ class GeminiService {
                 });
             }
 
-            resultStream = await this.chatSession.sendMessageStream({
+            const resultStream = await this.chatSession!.sendMessageStream({
                 message: messageParts
             });
 
@@ -208,48 +154,29 @@ class GeminiService {
             }
             return fullText;
         } catch (error: any) {
-            // this.chatSession = null; // Don't kill session immediately
-            const errString = JSON.stringify(error);
             console.error("JARVIZ Core Error:", error);
-
-            if (errString.includes("429") || errString.includes("RESOURCE_EXHAUSTED") || errString.includes("quota")) {
-                 console.warn("JARVIZ Quota Hit");
-                 const fallbackResponse = "Server busy (Quota limit). Try again later."; 
-                 onChunk(fallbackResponse);
-                 return fallbackResponse;
+            const errString = JSON.stringify(error);
+            if (errString.includes("429") || errString.includes("RESOURCE_EXHAUSTED")) {
+                 const fb = "System busy. Please try again in a moment.";
+                 onChunk(fb);
+                 return fb;
             }
-
-            // Return actual error message to help debug (API Key, Network, etc)
-            let rawError = error.message || "Connection error.";
-            // Clean up error message if it's too technical
-            if (rawError.includes("API key not valid")) rawError = "API Key Invalid.";
-            if (rawError.includes("Failed to fetch")) rawError = "Internet Connection Failed.";
-            
-            const fallbackResponse = `Error: ${rawError}`;
+            const fallbackResponse = "Error connecting to neural core. Please check your network.";
             onChunk(fallbackResponse);
             return fallbackResponse;
         }
     }
 
-    // --- NEW: Generate Smart Title for Chat Session ---
     public async generateTitle(context: string): Promise<string> {
-        if (!this.ai) return "";
         try {
-            // Create a temporary, lightweight model instance just for title generation
-            // This avoids messing with the main chat history
             const response = await this.ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: `Create a very short, concise title (max 3-5 words) for this conversation. Output ONLY the title. No quotes, no markdown. Text: ${context.substring(0, 1000)}`
+                model: 'gemini-3-flash-preview',
+                contents: `Create a very short title (max 3-5 words) for this chat: ${context.substring(0, 500)}`
             });
             return response.text ? response.text.trim() : "";
         } catch (e) {
-            console.error("Title gen error", e);
             return "";
         }
-    }
-
-    public async generateSpeech(text: string, voiceName: string = 'Fenrir'): Promise<string | undefined> {
-        return undefined; // Native TTS is faster
     }
 }
 
