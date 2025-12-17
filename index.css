@@ -1,0 +1,50 @@
+/* JARVIZ Global Web Styles */
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #050505;
+  color: #e0f2fe;
+  font-family: 'Rajdhani', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* Custom selection color */
+::selection {
+  background: rgba(6, 182, 212, 0.3);
+  color: #fff;
+}
+
+/* Global scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #0ea5e9;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #38bdf8;
+}
+
+/* Animation utilities */
+.animate-glow {
+  filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.5));
+}
+
+@keyframes slideLeft {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
