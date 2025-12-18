@@ -1,7 +1,7 @@
+
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
 import { MediaData, Message } from "../types";
 
-// Fixed: Escaped backticks inside the template literal to prevent them from prematurely closing the string and causing syntax errors.
 const SYSTEM_INSTRUCTION = `
 You are JARVIZ, a highly advanced AI created by "Erkinov".
 
@@ -61,7 +61,7 @@ const PROMPT_SUFFIXES: Record<string, { voice: string, text: string }> = {
     es: { voice: "(Responda en español, conciso.)", text: "(Responda en español, siguiendo estrictamente el formato solicitado.)" },
     fr: { voice: "(Répondez en français, concis.)", text: "(Répondez en français, en respectant strictement le format demandé.)" },
     de: { voice: "(Antworten Sie auf Deutsch, kurz.)", text: "(Antworten Sie auf Deutsch, strikt nach dem gewünschten Format.)" },
-    ja: { voice: "(日本語で简洁に答えてください。)", text: "(日本語で、要求された形式に厳密に従って答えてください。)" },
+    ja: { voice: "(日本語で简洁に答えてください。)", text: "(日本語で、要求された形式に严密に従って答えてください。)" },
     hi: { voice: "(हिंदी में संक्षिप्त उत्तर दें।)", text: "(हिंदी में अनुरोधित प्रारूप का सख्ती से पालन करते हुए उत्तर दें।)" },
 };
 
@@ -70,7 +70,7 @@ export class GeminiService {
     private chatSession: Chat | null = null;
 
     constructor() {
-        // Correct initialization using the API_KEY environment variable.
+        // Initialize with API key from environment variable exclusively as per guidelines.
         this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     }
 
@@ -95,7 +95,6 @@ export class GeminiService {
                     }));
             }
 
-            // Fixed: Use chats.create to properly initialize a multi-turn conversation.
             this.chatSession = this.ai.chats.create({
               model: 'gemini-3-flash-preview',
               config: {
@@ -140,15 +139,15 @@ export class GeminiService {
                 });
             }
 
-            // Fixed: sendMessageStream returns an AsyncIterable. The parameter must be the message content.
+            // Using sendMessageStream with the message object.
             const resultStream = await this.chatSession!.sendMessageStream({
                 message: messageParts
             });
 
             let fullText = "";
             for await (const chunk of resultStream) {
+                // Ensure text property is accessed directly, not called as a method.
                 const c = chunk as GenerateContentResponse;
-                // Fixed: Access the .text property directly (not a method).
                 const text = c.text;
                 if (text) {
                     fullText += text;
@@ -160,11 +159,11 @@ export class GeminiService {
             console.error("JARVIZ Core Error:", error);
             const errString = JSON.stringify(error);
             if (errString.includes("429") || errString.includes("RESOURCE_EXHAUSTED")) {
-                 const fb = "Server busy (Quota hit).";
+                 const fb = "Neural core busy. Retrying...";
                  onChunk(fb);
                  return fb;
             }
-            const fallbackResponse = `Error: ${error.message || "Connection failure"}`;
+            const fallbackResponse = "Error connecting to AI. Please verify network status.";
             onChunk(fallbackResponse);
             return fallbackResponse;
         }
@@ -172,12 +171,11 @@ export class GeminiService {
 
     public async generateTitle(context: string): Promise<string> {
         try {
-            // Fixed: Use ai.models.generateContent for single-turn text generation tasks.
             const response = await this.ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
                 contents: `Create a very short title (max 3-5 words) for this chat: ${context.substring(0, 500)}`
             });
-            // Fixed: Access the .text property directly.
+            // Accessed the text property from GenerateContentResponse.
             return response.text ? response.text.trim() : "";
         } catch (e) {
             return "";

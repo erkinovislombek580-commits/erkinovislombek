@@ -1,3 +1,4 @@
+
 /* JARVIZ Global Web Styles */
 :root {
   color-scheme: dark;
@@ -14,16 +15,13 @@ body {
   overflow: hidden;
 }
 
-/* Custom selection color */
 ::selection {
   background: rgba(6, 182, 212, 0.3);
   color: #fff;
 }
 
-/* Global scrollbar styling */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -35,16 +33,16 @@ body {
   border-radius: 10px;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #38bdf8;
-}
-
-/* Animation utilities */
-.animate-glow {
-  filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.5));
-}
-
 @keyframes slideLeft {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out forwards;
 }

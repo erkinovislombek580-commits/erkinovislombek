@@ -1,8 +1,8 @@
 {
-  "name": "JARVIZ AI",
-  "description": "A futuristic AI assistant powered by Gemini, featuring a holographic nano-core interface and voice interaction capabilities.",
   "requestFramePermissions": [
-    "microphone",
-    "camera"
-  ]
+    "camera",
+    "microphone"
+  ],
+  "name": "JARVIZ AI",
+  "description": "Futuristic AI Assistant with Vision and File Analysis"
 }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Send, Volume2, Globe, Menu, X, Camera, Play, StopCircle, Plus, Trash2, ShieldAlert, Loader2, Paperclip, Copy, Check, ZoomIn, ZoomOut, SkipBack, SkipForward, MonitorPlay, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import Background from './components/Background';
@@ -24,7 +25,6 @@ const SUPPORTED_LANGUAGES = [
 const TRANSLATIONS: Record<string, Translation> = {
     uz: { newChat: "YANGI CHAT", settings: "SOZLAMALAR", language: "TILNI TANLASH", placeholder: "Buyruq bering (yoki Ctrl+V)...", generating: "JAVOB TAYYORLANMOQDA...", systemOnline: "TIZIM ISHLAMOQDA", ready: "JARVIZ AI TAYYOR", mediaReady: "Media Tayyor", fileLimitError: "Maksimal 10 ta fayl.", filesReady: "Fayl tayyor", rec: "YOZILMOQDA", copy: "NUSXA OLISH", copied: "NUSXALANDI", code: "KOD", reset: "ASL HOLAT", user: "SIZ", security: "XAVFSIZLIK", jarviz: "JARVIZ", files: "FAYL", uploadTooltip: "Rasm yoki Video yuklash", history: "MULOQOT TARIXI", noHistory: "Tarix bo'sh", untitled: "Nomsiz suhbat", deleteConfirm: "O'chirilsinmi?" },
     en: { newChat: "NEW CHAT", settings: "SETTINGS", language: "INTERFACE LANGUAGE", placeholder: "Enter command (or Ctrl+V)...", generating: "GENERATING RESPONSE...", systemOnline: "SYSTEM ONLINE", ready: "JARVIZ AI READY", mediaReady: "Media Ready", fileLimitError: "Max 10 files.", filesReady: "Files ready", rec: "REC", copy: "COPY", copied: "COPIED", code: "CODE", reset: "RESET", user: "YOU", security: "SECURITY", jarviz: "JARVIZ", files: "FILES", uploadTooltip: "Upload Image or Video", history: "CHAT HISTORY", noHistory: "No history", untitled: "Untitled Chat", deleteConfirm: "Delete?" },
-    ru: { newChat: "НОВЫЙ ЧАТ", settings: "НАСТРОЙКИ", language: "ЯЗЫК ИНТЕРФЕЙСА", placeholder: "Введите команду (или Ctrl+V)...", generating: "ГЕНЕРАЦИЯ ОТВЕТА...", systemOnline: "СИСТЕМА В СЕТИ", ready: "JARVIZ AI ГОТОВ", mediaReady: "Медиа готово", fileLimitError: "Макс 10 файлов.", filesReady: "Файлов готово", rec: "ЗАПИСЬ", copy: "КОПИРОВАТЬ", copied: "СКОПИРОВАНО", code: "КОД", reset: "СБРОС", user: "ВЫ", security: "БЕЗОПАСНОСТЬ", jarviz: "ДЖАРВИЗ", files: "ФАЙЛ", uploadTooltip: "Загрузить фото или видео", history: "ИСТОРИЯ ЧАТОВ", noHistory: "История пуста", untitled: "Без названия", deleteConfirm: "Удалить?" },
 };
 
 const WaveformIcon = () => (
@@ -87,7 +87,7 @@ const PresentationViewer = ({ slides }: { slides: any[] }) => {
 };
 
 const MessageItem = React.memo(({ msg, onMediaClick, onSpeak, isSpeaking, labels }: { msg: Message, onMediaClick: (data: MediaData) => void, onSpeak: (id: string, text: string) => void, isSpeaking: boolean, labels: Translation }) => {
-    const isSystemAlert = msg.text.includes("[SYSTEM ALERT]");
+    const isSystemAlert = msg.text.includes("[VIOLATION]");
     const extractSlides = (text: string) => {
         try {
             const jsonMatch = text.match(/```json\s*(\[\s*\{[\s\S]*?\}\s*\])\s*```/);
@@ -107,7 +107,7 @@ const MessageItem = React.memo(({ msg, onMediaClick, onSpeak, isSpeaking, labels
                         code({node, className, children, ...props}) {
                             return <code className="bg-cyan-950/50 text-cyan-200 px-1.5 py-0.5 rounded text-xs font-mono" {...props}>{children}</code>
                         }
-                    }}>{cleanText.replace("[SYSTEM ALERT]", "").trim()}</ReactMarkdown>
+                    }}>{cleanText.replace("[VIOLATION]", "⚠️ SECURITY ALERT").trim()}</ReactMarkdown>
                 </div>
                 {msg.media && <div className="mt-3 grid grid-cols-2 gap-2">{msg.media.map((m, i) => <div key={i} onClick={() => onMediaClick(m)} className="h-32 border border-cyan-500/30 overflow-hidden rounded cursor-pointer"><img src={m.data} className="w-full h-full object-cover" /></div>)}</div>}
                 {msg.role === 'model' && (
@@ -130,6 +130,7 @@ const App: React.FC = () => {
     const [viewingMedia, setViewingMedia] = useState<MediaData | null>(null);
     const [mediaQueue, setMediaQueue] = useState<MediaData[]>([]);
     const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
     const [sessions, setSessions] = useState<ChatSession[]>(() => {
         const saved = localStorage.getItem('jarviz_history');
         return saved ? JSON.parse(saved) : [];
@@ -138,14 +139,51 @@ const App: React.FC = () => {
 
     const t = TRANSLATIONS[language] || TRANSLATIONS['uz'];
     const endRef = useRef<HTMLDivElement>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
     useEffect(() => { localStorage.setItem('jarviz_history', JSON.stringify(sessions)); }, [sessions]);
 
+    const startCamera = async () => {
+        try {
+            setIsCameraOpen(true);
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
+        } catch (err) {
+            console.error("Camera error:", err);
+            setIsCameraOpen(false);
+        }
+    };
+
+    const stopCamera = () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+            videoRef.current.srcObject = null;
+        }
+        setIsCameraOpen(false);
+    };
+
+    const capturePhoto = () => {
+        if (videoRef.current && canvasRef.current) {
+            const context = canvasRef.current.getContext('2d');
+            if (context) {
+                canvasRef.current.width = videoRef.current.videoWidth;
+                canvasRef.current.height = videoRef.current.videoHeight;
+                context.drawImage(videoRef.current, 0, 0);
+                const dataUrl = canvasRef.current.toDataURL('image/png');
+                setMediaQueue(prev => [...prev, { type: 'image', data: dataUrl, mimeType: 'image/png' }]);
+                stopCamera();
+            }
+        }
+    };
+
     const handleSendMessage = async () => {
         if (!inputValue.trim() && mediaQueue.length === 0) return;
         const currentMedia = [...mediaQueue];
-        // Fixed: Explicitly type newUserMsg to prevent role string inference errors.
         const newUserMsg: Message = { 
             id: Date.now().toString(), 
             role: 'user' as const, 
@@ -159,7 +197,6 @@ const App: React.FC = () => {
         setStatus(ConnectionStatus.PROCESSING);
         
         const aiId = (Date.now() + 1).toString();
-        // Fixed: Use 'model' as const to satisfy the Message interface role requirement.
         setMessages(prev => [...prev, { id: aiId, role: 'model' as const, text: '', timestamp: new Date() }]);
         
         let full = "";
@@ -171,18 +208,13 @@ const App: React.FC = () => {
         
         setSessions(prev => {
             const idx = prev.findIndex(s => s.id === currentId);
-            // Fixed: Explicitly typed newMsg as Message[] to ensure the array contains valid Message objects.
-            const newMsg: Message[] = [
-                ...messages, 
-                newUserMsg, 
-                { id: aiId, role: 'model' as const, text: full, timestamp: new Date() }
-            ];
+            const newMsg: Message[] = [...messages, newUserMsg, { id: aiId, role: 'model' as const, text: full, timestamp: new Date() }];
             if (idx >= 0) {
                 const updated = [...prev];
                 updated[idx] = { ...updated[idx], messages: newMsg, timestamp: Date.now() };
                 return updated;
             } else {
-                return [{ id: currentId, title: newUserMsg.text.slice(0, 20), messages: newMsg, timestamp: Date.now(), language }, ...prev];
+                return [{ id: currentId, title: newUserMsg.text.slice(0, 20) || 'New Chat', messages: newMsg, timestamp: Date.now(), language }, ...prev];
             }
         });
     };
@@ -192,6 +224,8 @@ const App: React.FC = () => {
         else {
             window.speechSynthesis.cancel();
             const u = new SpeechSynthesisUtterance(text);
+            const selectedLang = SUPPORTED_LANGUAGES.find(l => l.code === language);
+            u.lang = selectedLang?.locale || 'uz-UZ';
             u.onstart = () => { setSpeakingMessageId(id); setStatus(ConnectionStatus.SPEAKING); };
             u.onend = () => { setSpeakingMessageId(null); setStatus(ConnectionStatus.CONNECTED); };
             window.speechSynthesis.speak(u);
@@ -208,39 +242,81 @@ const App: React.FC = () => {
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded bg-cyan-950/30 border border-cyan-500/20 text-cyan-400"><Menu size={20} /></button>
                     <div className="flex items-center gap-2">
                         {status === ConnectionStatus.SPEAKING ? <div className="w-8 h-8 relative"><WaveformIcon /></div> : <div className="w-8 h-8 relative"><RealGlobeIcon /></div>}
-                        <h1 className="font-orbitron text-lg font-bold">JARVIZ</h1>
+                        <h1 className="font-orbitron text-lg font-bold text-cyan-400">JARVIZ</h1>
                     </div>
                 </div>
                 <div className="text-[10px] font-mono text-cyan-500">{t.systemOnline}</div>
             </header>
 
             <main className="flex-1 relative overflow-hidden">
-                <div className="absolute inset-0 flex items-center justify-center opacity-40 pointer-events-none"><NanoCore status={status} analyser={null} /></div>
+                <div className="absolute inset-0 flex items-center justify-center opacity-40 pointer-events-none scale-75 md:scale-100"><NanoCore status={status} analyser={null} /></div>
                 <div className="relative z-10 w-full h-full overflow-y-auto custom-scrollbar px-4 py-6">
                     {messages.length === 0 && <div className="h-full flex items-center justify-center text-cyan-500/50 font-orbitron text-xs tracking-widest">{t.ready}</div>}
                     {messages.map(m => <MessageItem key={m.id} msg={m} onMediaClick={setViewingMedia} onSpeak={speak} isSpeaking={speakingMessageId === m.id} labels={t} />)}
-                    {status === ConnectionStatus.PROCESSING && <div className="pl-4 py-2 text-cyan-400 animate-pulse text-xs">{t.generating}</div>}
+                    {status === ConnectionStatus.PROCESSING && <div className="pl-4 py-2 text-cyan-400 animate-pulse text-xs font-orbitron tracking-wider">{t.generating}</div>}
                     <div ref={endRef} />
                 </div>
+
+                {/* Camera Overlay */}
+                {isCameraOpen && (
+                    <div className="absolute inset-0 z-40 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
+                        <div className="relative w-full max-w-lg aspect-video bg-black rounded-2xl overflow-hidden border border-cyan-500/50 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
+                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                            <div className="absolute top-4 right-4"><button onClick={stopCamera} className="p-2 bg-black/50 text-white rounded-full"><X size={24} /></button></div>
+                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2">
+                                <button onClick={capturePhoto} className="w-16 h-16 bg-cyan-500 rounded-full border-4 border-white shadow-lg flex items-center justify-center active:scale-90 transition-transform"><Camera size={32} className="text-black" /></button>
+                            </div>
+                        </div>
+                        <p className="mt-4 font-orbitron text-xs text-cyan-400 animate-pulse">EYE SENSORS ACTIVE</p>
+                    </div>
+                )}
+                <canvas ref={canvasRef} className="hidden" />
             </main>
 
             <footer className="relative z-30 p-3 bg-black/80 backdrop-blur-lg border-t border-cyan-900/30">
                 <div className="max-w-3xl mx-auto flex items-center gap-3">
-                    <button className="p-3 rounded-lg bg-cyan-900/20 text-cyan-400"><Paperclip size={20} /></button>
-                    <div className="flex-1 bg-black/50 border border-cyan-900/30 rounded-lg px-4 py-3">
-                        <input value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder={t.placeholder} className="w-full bg-transparent outline-none text-cyan-100" />
+                    <div className="flex gap-2">
+                        <label className="p-3 rounded-xl bg-cyan-900/20 text-cyan-400 cursor-pointer hover:bg-cyan-900/40 active:scale-90 transition-all">
+                            <Paperclip size={20}/><input type="file" className="hidden" multiple onChange={e => {
+                                const files = Array.from(e.target.files || []);
+                                // Fix: Explicitly type 'f' as File to resolve 'unknown' type errors in the forEach callback.
+                                files.forEach((f: File) => {
+                                    const r = new FileReader();
+                                    r.onload = () => setMediaQueue(p => [...p, { type: 'image', data: r.result as string, mimeType: f.type }]);
+                                    r.readAsDataURL(f);
+                                });
+                            }} />
+                        </label>
+                        <button onClick={startCamera} className="p-3 rounded-xl bg-cyan-900/20 text-cyan-400 active:scale-90 transition-all"><Camera size={20}/></button>
                     </div>
-                    <button onClick={handleSendMessage} className="p-3 rounded-lg bg-cyan-600 text-white"><Send size={20} /></button>
+                    <div className="flex-1 bg-black/40 border border-cyan-500/20 rounded-2xl px-4 py-3 flex flex-col">
+                        {mediaQueue.length > 0 && (
+                            <div className="flex gap-2 mb-2 overflow-x-auto pb-1 custom-scrollbar">
+                                {mediaQueue.map((m,i) => (
+                                    <div key={i} className="relative group">
+                                        <img src={m.data} className="h-10 w-10 rounded border border-cyan-500/50 object-cover"/>
+                                        <button onClick={() => setMediaQueue(p => p.filter((_, idx) => idx !== i))} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10}/></button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <input value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder={t.placeholder} className="w-full bg-transparent outline-none text-cyan-50 placeholder-cyan-900/50" />
+                    </div>
+                    <button onClick={handleSendMessage} className="p-4 rounded-2xl bg-cyan-600 hover:bg-cyan-500 shadow-lg shadow-cyan-900/40 active:scale-90 transition-transform"><Send size={24}/></button>
                 </div>
             </footer>
 
-            <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#090b10] border-r border-cyan-900/30 transform transition-transform ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col p-4`}>
-                <div className="flex justify-between items-center mb-6"><h2 className="font-orbitron text-sm font-bold text-cyan-400">{t.settings}</h2><button onClick={() => setIsMenuOpen(false)}><X size={20} /></button></div>
-                <button onClick={newChat} className="w-full py-3 mb-6 bg-cyan-900/50 border border-cyan-500/30 rounded font-orbitron text-xs font-bold text-white flex items-center justify-center gap-2"><Plus size={16} />{t.newChat}</button>
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                    <p className="text-[10px] text-cyan-500/50 mb-2">{t.history}</p>
-                    {sessions.map(s => <div key={s.id} onClick={() => { setMessages(s.messages); setCurrentId(s.id); setIsMenuOpen(false); jarvizServer.startChat(s.messages); }} className={`p-2 rounded mb-1 text-xs truncate cursor-pointer ${currentId === s.id ? 'bg-cyan-950 text-cyan-100' : 'text-slate-500 hover:bg-white/5'}`}>{s.title}</div>)}
+            <div className={`fixed inset-y-0 left-0 z-50 w-72 bg-[#090b10] border-r border-cyan-900/30 transform transition-transform duration-500 ease-out ${isMenuOpen ? 'translate-x-0 shadow-[20px_0_50px_rgba(0,0,0,0.8)]' : '-translate-x-full'} flex flex-col p-6`}>
+                <div className="flex justify-between items-center mb-8 border-b border-cyan-900/30 pb-4"><h2 className="font-orbitron text-cyan-400 text-xs tracking-widest">{t.settings}</h2><button onClick={() => setIsMenuOpen(false)} className="text-cyan-900 hover:text-cyan-400"><X/></button></div>
+                <button onClick={newChat} className="w-full py-3 mb-6 bg-cyan-900/20 border border-cyan-500/30 rounded-xl font-orbitron text-[10px] tracking-widest hover:bg-cyan-900/40 transition-all flex items-center justify-center gap-2"><Plus size={14} />{t.newChat}</button>
+                <div className="grid grid-cols-3 gap-2 mb-8">
+                    {SUPPORTED_LANGUAGES.map(l => <button key={l.code} onClick={() => setLanguage(l.code)} className={`p-2 rounded-xl border transition-all ${language === l.code ? 'border-cyan-400 bg-cyan-950/50' : 'border-white/5 bg-white/5 hover:border-cyan-900'}`}>{l.flag}</button>)}
                 </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    <p className="text-[10px] font-orbitron text-cyan-900 mb-4 uppercase tracking-[0.2em]">{t.history}</p>
+                    {sessions.map(s => <div key={s.id} onClick={() => { setMessages(s.messages); setCurrentId(s.id); setIsMenuOpen(false); jarvizServer.startChat(s.messages); }} className={`p-3 rounded-xl mb-2 text-xs truncate cursor-pointer transition-all border ${currentId === s.id ? 'bg-cyan-950/30 border-cyan-500/40 text-cyan-100 shadow-lg' : 'border-transparent text-slate-500 hover:bg-white/5'}`}>{s.title}</div>)}
+                </div>
+                <div className="pt-4 border-t border-cyan-900/30 text-center"><div className="text-[8px] font-orbitron text-cyan-900 uppercase tracking-widest">NEURAL LINK v3.0.1</div></div>
             </div>
         </div>
     );

@@ -1,8 +1,9 @@
 
 export interface MediaData {
-    type: 'image' | 'video';
+    type: 'image' | 'video' | 'file';
     data: string;
     mimeType: string;
+    fileName?: string;
 }
 
 export interface Message {
@@ -18,7 +19,7 @@ export interface ChatSession {
     id: string;
     title: string;
     messages: Message[];
-    timestamp: number; // For sorting
+    timestamp: number;
     language: string;
 }
 
@@ -30,8 +31,6 @@ export enum ConnectionStatus {
     GENERATING_AUDIO = 'GENERATING_AUDIO',
     SPEAKING = 'SPEAKING'
 }
-
-export type VoiceName = 'Fenrir' | 'Kore' | 'Puck' | 'Charon';
 
 export interface Translation {
     newChat: string;
@@ -54,8 +53,14 @@ export interface Translation {
     jarviz: string;
     files: string;
     uploadTooltip: string;
-    history: string; // New
-    noHistory: string; // New
-    untitled: string; // New
-    deleteConfirm: string; // New
+    history: string;
+    noHistory: string;
+    untitled: string;
+    deleteConfirm: string;
+}
+
+export interface Slide {
+    title: string;
+    content: string[];
+    visual: string;
 }
